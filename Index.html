@@ -1,0 +1,824 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Audio Converter — WAV to MP3 / WAV</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Bebas+Neue&family=DM+Sans:wght@300;400;500&display=swap');
+
+  :root {
+    --bg: #f5f5f0;
+    --surface: #ffffff;
+    --surface2: #efefea;
+    --border: #d8d8d0;
+    --accent: #2a7a2a;
+    --text: #1a1a1a;
+    --muted: #888;
+    --danger: #cc2222;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 48px 24px 80px;
+    position: relative;
+    overflow-x: hidden;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(42,122,42,0.06) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(42,122,42,0.06) 1px, transparent 1px);
+    background-size: 48px 48px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .container { width: 100%; max-width: 700px; position: relative; z-index: 1; }
+
+  header { margin-bottom: 40px; }
+
+  .label-tag {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--accent);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .label-tag::before { content: ''; display: inline-block; width: 20px; height: 1px; background: var(--accent); }
+
+  h1 {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: clamp(52px, 10vw, 88px);
+    line-height: 0.9;
+    letter-spacing: 0.02em;
+    color: var(--text);
+  }
+  h1 span { color: var(--accent); }
+
+  .subtitle {
+    font-family: 'DM Mono', monospace;
+    font-size: 13px;
+    color: var(--muted);
+    margin-top: 16px;
+    line-height: 1.6;
+  }
+
+  /* Status */
+  .status-bar {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 16px;
+    margin-bottom: 28px;
+    display: flex; align-items: center; gap: 10px;
+    transition: all 0.3s;
+  }
+  .status-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--muted); flex-shrink: 0; transition: background 0.3s;
+  }
+  .status-bar.ready .status-dot  { background: var(--accent); box-shadow: 0 0 8px rgba(42,122,42,0.5); }
+  .status-bar.loading .status-dot { background: #e0a820; animation: blink 1s infinite; }
+  .status-bar.error .status-dot  { background: var(--danger); }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+  /* Dropzone */
+  .dropzone {
+    border: 1.5px dashed var(--border);
+    border-radius: 12px;
+    padding: 40px 32px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.25s;
+    background: var(--surface);
+    position: relative; overflow: hidden;
+    margin-bottom: 20px;
+  }
+  .dropzone::after {
+    content: ''; position: absolute; inset: 0;
+    background: radial-gradient(ellipse at 50% 0%, rgba(42,122,42,0.05) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .dropzone:hover, .dropzone.dragover { border-color: var(--accent); background: #f0f7f0; }
+  .dropzone.dragover { transform: scale(1.01); }
+  .drop-icon { width: 44px; height: 44px; margin: 0 auto 14px; color: var(--accent); opacity: 0.7; }
+  .drop-title { font-family: 'DM Mono', monospace; font-size: 14px; color: var(--text); margin-bottom: 5px; }
+  .drop-sub { font-size: 12px; color: var(--muted); }
+  #fileInput { display: none; }
+
+  /* File list */
+  .file-list { display: none; flex-direction: column; gap: 6px; margin-bottom: 20px; }
+  .file-list.visible { display: flex; }
+
+  .file-list-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 2px; margin-bottom: 4px;
+  }
+  .file-list-count {
+    font-family: 'DM Mono', monospace; font-size: 11px;
+    color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase;
+  }
+  .btn-sm {
+    font-family: 'DM Mono', monospace; font-size: 11px;
+    background: none; border-radius: 5px; padding: 4px 10px;
+    cursor: pointer; transition: all 0.2s;
+  }
+  .btn-sm.add  { color: var(--accent); border: 1px solid rgba(42,122,42,0.3); }
+  .btn-sm.add:hover  { background: rgba(42,122,42,0.07); }
+  .btn-sm.del  { color: var(--danger); border: 1px solid rgba(204,34,34,0.25); }
+  .btn-sm.del:hover  { background: rgba(204,34,34,0.05); }
+
+  .file-item {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 14px;
+    display: flex; align-items: center; gap: 12px;
+    animation: fadeUp 0.2s ease forwards; opacity: 0;
+  }
+  @keyframes fadeUp { to{opacity:1;transform:translateY(0)} from{opacity:0;transform:translateY(6px)} }
+  .file-item-icon {
+    width: 30px; height: 30px; background: rgba(42,122,42,0.1);
+    border-radius: 6px; display: flex; align-items: center; justify-content: center;
+    font-family: 'DM Mono', monospace; font-size: 9px; color: var(--accent);
+    font-weight: 500; flex-shrink: 0;
+  }
+  .file-item-meta { flex: 1; overflow: hidden; }
+  .file-item-name {
+    font-family: 'DM Mono', monospace; font-size: 12px; color: var(--text);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .file-item-size { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--muted); margin-top: 2px; }
+  .file-item-remove {
+    background: none; border: none; color: var(--muted);
+    cursor: pointer; font-size: 15px; line-height: 1;
+    padding: 2px 4px; transition: color 0.2s; flex-shrink: 0;
+  }
+  .file-item-remove:hover { color: var(--danger); }
+
+  /* Format cards */
+  .section-label {
+    font-family: 'DM Mono', monospace; font-size: 11px; color: var(--muted);
+    letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 12px;
+  }
+  .formats { display: grid; grid-template-columns: repeat(3,1fr); gap: 10px; margin-bottom: 24px; }
+  .format-card {
+    background: var(--surface); border: 1.5px solid var(--border);
+    border-radius: 10px; padding: 14px 12px;
+    cursor: pointer; transition: all 0.2s; user-select: none;
+  }
+  .format-card:hover { border-color: #aaa; background: var(--surface2); }
+  .format-card.selected { border-color: var(--accent); background: rgba(42,122,42,0.06); }
+  .format-card input[type="checkbox"] { display: none; }
+  .format-name { font-family: 'Bebas Neue', sans-serif; font-size: 22px; letter-spacing: 0.05em; color: var(--text); margin-bottom: 2px; }
+  .format-card.selected .format-name { color: var(--accent); }
+  .format-spec { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--muted); line-height: 1.5; }
+
+  /* Convert button */
+  .convert-btn {
+    width: 100%; padding: 18px;
+    background: var(--accent); color: #fff; border: none; border-radius: 10px;
+    font-family: 'Bebas Neue', sans-serif; font-size: 22px; letter-spacing: 0.1em;
+    cursor: pointer; transition: all 0.2s; margin-bottom: 24px;
+  }
+  .convert-btn:hover:not(:disabled) { background: #1f6b1f; transform: translateY(-1px); box-shadow: 0 8px 24px rgba(42,122,42,0.25); }
+  .convert-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+  .convert-btn .btn-inner { display: flex; align-items: center; justify-content: center; gap: 10px; }
+
+  /* Progress */
+  .progress-wrap { display: none; margin-bottom: 24px; }
+  .progress-wrap.visible { display: block; }
+  .progress-header {
+    display: flex; justify-content: space-between;
+    font-family: 'DM Mono', monospace; font-size: 11px; color: var(--muted); margin-bottom: 8px;
+  }
+  .progress-bar-bg { background: var(--surface2); border-radius: 4px; height: 4px; overflow: hidden; }
+  .progress-bar-fill { height: 100%; background: var(--accent); border-radius: 4px; transition: width 0.4s; box-shadow: 0 0 10px rgba(42,122,42,0.4); }
+
+  /* Converting banner */
+  .converting-banner {
+    display: none;
+    background: #fffbe6;
+    border: 1.5px solid #f0c830;
+    border-radius: 10px;
+    padding: 14px 20px;
+    margin-bottom: 20px;
+    align-items: center;
+    gap: 14px;
+  }
+  .converting-banner.visible { display: flex; }
+  .converting-spinner {
+    width: 22px; height: 22px; flex-shrink: 0;
+    border: 2.5px solid #e8b800;
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .converting-banner-title {
+    font-family: 'DM Mono', monospace; font-size: 13px;
+    color: #7a5c00; font-weight: 500;
+  }
+  .converting-banner-sub {
+    font-family: 'DM Mono', monospace; font-size: 11px;
+    color: #a07820; margin-top: 3px;
+  }
+
+  /* Done banner */
+  .done-banner {
+    display: none;
+    background: #edfaed;
+    border: 1.5px solid var(--accent);
+    border-radius: 10px;
+    padding: 14px 20px;
+    margin-bottom: 20px;
+    align-items: center;
+    gap: 14px;
+  }
+  .done-banner.visible { display: flex; animation: fadeUp 0.4s ease; }
+  .done-icon {
+    width: 28px; height: 28px; flex-shrink: 0;
+    background: var(--accent); border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; font-size: 15px; line-height: 1;
+  }
+  .done-banner-title {
+    font-family: 'DM Mono', monospace; font-size: 13px;
+    color: #1a5c1a; font-weight: 500;
+  }
+  .done-banner-sub {
+    font-family: 'DM Mono', monospace; font-size: 11px;
+    color: #3a8a3a; margin-top: 3px;
+  }
+
+  /* Results */
+  .results { display: none; flex-direction: column; gap: 12px; }
+  .results.visible { display: flex; }
+  .results-label { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--muted); letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 2px; }
+
+  /* ZIP cards */
+  .zip-card {
+    background: var(--surface); border: 1.5px solid var(--border);
+    border-radius: 12px; overflow: hidden;
+    animation: fadeUp 0.3s ease forwards; opacity: 0;
+  }
+  .zip-card-header {
+    display: flex; align-items: center; gap: 14px;
+    padding: 16px 20px; border-bottom: 1px solid var(--border);
+  }
+  .zip-badge {
+    font-family: 'Bebas Neue', sans-serif; font-size: 16px; letter-spacing: 0.05em;
+    background: rgba(42,122,42,0.1); color: var(--accent);
+    padding: 5px 12px; border-radius: 6px; flex-shrink: 0;
+  }
+  .zip-info { flex: 1; }
+  .zip-title { font-family: 'DM Mono', monospace; font-size: 13px; color: var(--text); font-weight: 500; }
+  .zip-meta { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--muted); margin-top: 2px; }
+  .zip-dl-btn {
+    background: var(--accent); color: #fff; border: none; border-radius: 7px;
+    padding: 9px 18px; font-family: 'DM Mono', monospace; font-size: 11px; font-weight: 500;
+    cursor: pointer; transition: all 0.2s;
+    display: flex; align-items: center; gap: 6px; flex-shrink: 0;
+  }
+  .zip-dl-btn:hover:not(:disabled) { background: #1f6b1f; transform: translateY(-1px); }
+  .zip-dl-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+  .zip-file-list { padding: 10px 20px 14px; display: flex; flex-direction: column; gap: 4px; }
+  .zip-file-row {
+    display: flex; align-items: center; gap: 10px;
+    font-family: 'DM Mono', monospace; font-size: 11px; color: var(--muted); padding: 3px 0;
+  }
+  .zip-file-row.done  { color: var(--text); }
+  .zip-file-row.error { color: var(--danger); }
+  .zip-file-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--border); flex-shrink: 0; transition: background 0.3s; }
+  .zip-file-row.done  .zip-file-dot { background: var(--accent); }
+  .zip-file-row.error .zip-file-dot { background: var(--danger); }
+  .zip-file-row.active .zip-file-dot { background: #e0a820; animation: blink 0.8s infinite; }
+
+  .topnav {
+    position: fixed;
+    top: 24px; right: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    z-index: 100;
+  }
+  .topnav a {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    text-decoration: none;
+    display: flex; align-items: center; gap: 8px;
+    border-radius: 8px;
+    padding: 10px 16px;
+    transition: all 0.2s;
+    white-space: nowrap;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+  }
+  .topnav a.btn-home {
+    background: var(--accent);
+    color: #fff;
+    border: 2px solid var(--accent);
+  }
+  .topnav a.btn-home:hover {
+    background: #1f6b1f;
+    border-color: #1f6b1f;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 14px rgba(42,122,42,0.35);
+  }
+  .topnav a.btn-yt {
+    background: #ff0000;
+    color: #fff;
+    border: 2px solid #ff0000;
+  }
+  .topnav a.btn-yt:hover {
+    background: #cc0000;
+    border-color: #cc0000;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 14px rgba(255,0,0,0.3);
+  }
+  .topnav a svg { flex-shrink: 0; }
+
+  footer { margin-top: 60px; text-align: center; font-family: 'DM Mono', monospace; font-size: 11px; color: #999; line-height: 1.8; }
+  footer a { color: #777; text-decoration: none; }
+  footer a:hover { color: #444; }
+</style>
+</head>
+<body>
+
+<nav class="topnav">
+  <a href="https://litt.ly/moneyhanjan" target="_blank" class="btn-home">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 010 20M12 2a15.3 15.3 0 000 20"/></svg>
+    머니한잔 홈페이지
+  </a>
+  <a href="https://www.youtube.com/@%EB%A8%B8%EB%8B%88%ED%95%9C%EC%9E%94" target="_blank" class="btn-yt">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M23.5 6.2a3 3 0 00-2.1-2.1C19.5 3.5 12 3.5 12 3.5s-7.5 0-9.4.6A3 3 0 00.5 6.2C0 8.1 0 12 0 12s0 3.9.5 5.8a3 3 0 002.1 2.1c1.9.6 9.4.6 9.4.6s7.5 0 9.4-.6a3 3 0 002.1-2.1C24 15.9 24 12 24 12s0-3.9-.5-5.8zM9.7 15.5V8.5l6.3 3.5-6.3 3.5z"/></svg>
+    머니한잔 유튜브
+  </a>
+</nav>
+
+<div class="container">
+
+  <header>
+    <div class="label-tag">Audio Format Converter</div>
+    <h1>WAV <span>CONVERTER</span></h1>
+    <p class="subtitle">
+      브라우저에서 직접 변환 — 서버 전송 없음<br>
+      여러 파일을 한 번에 · 포맷별 ZIP 다운로드
+    </p>
+  </header>
+
+  <div class="status-bar loading" id="statusBar">
+    <div class="status-dot"></div>
+    <span id="statusText">ffmpeg.wasm 로딩 중... (최초 1회, 약 30초 소요)</span>
+  </div>
+
+  <div class="dropzone" id="dropzone">
+    <svg class="drop-icon" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5">
+      <path d="M24 4v28M14 22l10-10 10 10" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M8 36v4a2 2 0 002 2h28a2 2 0 002-2v-4" stroke-linecap="round"/>
+    </svg>
+    <div class="drop-title">WAV 파일을 여기에 드래그하거나 클릭</div>
+    <div class="drop-sub">여러 파일 동시 선택 가능 · 지원 형식: .wav</div>
+    <input type="file" id="fileInput" accept=".wav,audio/wav" multiple>
+  </div>
+
+  <div class="file-list" id="fileList">
+    <div class="file-list-header">
+      <span class="file-list-count" id="fileListCount">0개 파일</span>
+      <div style="display:flex;gap:8px">
+        <button class="btn-sm add" id="addMoreBtn">+ 파일 추가</button>
+        <button class="btn-sm del" id="clearAllBtn">전체 삭제</button>
+      </div>
+    </div>
+    <input type="file" id="addFileInput" accept=".wav,audio/wav" multiple style="display:none">
+  </div>
+
+  <div class="section-label">출력 포맷 선택</div>
+  <div class="formats">
+    <div class="format-card" id="card-mp3" data-format="mp3">
+      <div class="format-name">MP3</div>
+      <div class="format-spec">320 kbps<br>CBR · LAME</div>
+    </div>
+    <div class="format-card" id="card-wav441" data-format="wav441">
+      <div class="format-name">WAV</div>
+      <div class="format-spec">44.1 kHz / 16-bit<br>PCM · CD Quality</div>
+    </div>
+    <div class="format-card" id="card-wav48" data-format="wav48">
+      <div class="format-name">WAV</div>
+      <div class="format-spec">48 kHz / 24-bit<br>PCM · Studio</div>
+    </div>
+  </div>
+
+  <button class="convert-btn" id="convertBtn" disabled>
+    <div class="btn-inner">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polyline points="23 4 23 10 17 10"></polyline>
+        <polyline points="1 20 1 14 7 14"></polyline>
+        <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"></path>
+      </svg>
+      <span id="convertBtnText">변환 시작</span>
+    </div>
+  </button>
+
+  <!-- Converting banner -->
+  <div class="converting-banner" id="convertingBanner">
+    <div class="converting-spinner"></div>
+    <div>
+      <div class="converting-banner-title" id="convertingTitle">변환 중...</div>
+      <div class="converting-banner-sub" id="convertingSub">잠시만 기다려 주세요</div>
+    </div>
+  </div>
+
+  <!-- Done banner -->
+  <div class="done-banner" id="doneBanner">
+    <div class="done-icon">✓</div>
+    <div>
+      <div class="done-banner-title" id="doneTitle">변환 완료!</div>
+      <div class="done-banner-sub" id="doneSub">아래 ZIP 파일을 다운로드하세요</div>
+    </div>
+  </div>
+
+  <div class="progress-wrap" id="progressWrap">
+    <div class="progress-header">
+      <span id="progressLabel">변환 중...</span>
+      <span id="progressPct">0%</span>
+    </div>
+    <div class="progress-bar-bg">
+      <div class="progress-bar-fill" id="progressFill" style="width:0%"></div>
+    </div>
+  </div>
+
+  <div class="results" id="results"></div>
+
+</div>
+
+<footer>
+  모든 처리는 브라우저 내에서 이루어집니다 · 파일이 외부 서버로 전송되지 않습니다<br>
+  Powered by <a href="https://github.com/ffmpegwasm/ffmpeg.wasm" target="_blank">ffmpeg.wasm</a>
+  &amp; <a href="https://stuk.github.io/jszip/" target="_blank">JSZip</a>
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
+<script>
+  const { createFFmpeg, fetchFile } = FFmpeg;
+
+  // DOM
+  const statusBar     = document.getElementById('statusBar');
+  const statusText    = document.getElementById('statusText');
+  const dropzone      = document.getElementById('dropzone');
+  const fileInput     = document.getElementById('fileInput');
+  const addFileInput  = document.getElementById('addFileInput');
+  const fileListEl    = document.getElementById('fileList');
+  const fileListCount = document.getElementById('fileListCount');
+  const addMoreBtn    = document.getElementById('addMoreBtn');
+  const clearAllBtn   = document.getElementById('clearAllBtn');
+  const convertBtn    = document.getElementById('convertBtn');
+  const convertBtnText = document.getElementById('convertBtnText');
+  const progressWrap  = document.getElementById('progressWrap');
+  const progressLabel = document.getElementById('progressLabel');
+  const progressPct   = document.getElementById('progressPct');
+  const progressFill  = document.getElementById('progressFill');
+  const resultsEl     = document.getElementById('results');
+  const convertingBanner = document.getElementById('convertingBanner');
+  const convertingTitle  = document.getElementById('convertingTitle');
+  const convertingSub    = document.getElementById('convertingSub');
+  const doneBanner    = document.getElementById('doneBanner');
+  const doneTitle     = document.getElementById('doneTitle');
+  const doneSub       = document.getElementById('doneSub');
+
+  // State
+  let ffmpeg = null;
+  let ffmpegReady = false;
+  let selectedFiles = [];
+
+  const FORMAT_DEFS = {
+    mp3:    { label: 'MP3',             suffix: '_320kbps.mp3',     args: ['-ar','44100','-b:a','320k','-f','mp3'],       mime: 'audio/mpeg', zipName: 'MP3_320kbps.zip' },
+    mp3:    { label: 'MP3',             suffix: '_320k.mp3',     args: ['-vn','-ar','44100','-ac','2','-b:a','320k'],                    mime: 'audio/mpeg', zipName: 'MP3_320kbps.zip' },
+    wav441: { label: 'WAV 44.1k/16bit', suffix: '_441_16.wav',  args: ['-vn','-ar','44100','-ac','2','-acodec','pcm_s16le'],              mime: 'audio/wav',  zipName: 'WAV_44100_16bit.zip' },
+    wav48:  { label: 'WAV 48k/24bit',   suffix: '_48_24.wav',   args: ['-vn','-ar','48000','-ac','2','-acodec','pcm_s32le'],              mime: 'audio/wav',  zipName: 'WAV_48000_24bit.zip' },
+  };
+
+  // Load ffmpeg
+  async function loadFFmpeg() {
+    try {
+      setStatus('loading', 'ffmpeg.wasm 로딩 중... (최초 1회, 약 30초 소요)');
+      ffmpeg = createFFmpeg({
+        log: true,
+        mainName: 'main',
+        corePath: 'https://unpkg.com/@ffmpeg/core-st@0.11.1/dist/ffmpeg-core.js',
+      });
+      await ffmpeg.load();
+      ffmpegReady = true;
+      setStatus('ready', '준비 완료 — WAV 파일을 드래그하거나 클릭해서 선택하세요');
+      updateConvertBtn();
+    } catch (e) {
+      setStatus('error', '로드 실패: ' + e.message + ' — 페이지를 새로고침해 주세요');
+    }
+  }
+
+  function setStatus(type, msg) {
+    statusBar.className = 'status-bar ' + type;
+    statusText.textContent = msg;
+  }
+
+  // Format card toggle — div 기반, checkbox 없음
+  const selectedFormats = new Set(); // 기본 비선택
+
+  document.querySelectorAll('.format-card').forEach(card => {
+    card.addEventListener('click', () => {
+      const fmt = card.dataset.format;
+      if (selectedFormats.has(fmt)) {
+        selectedFormats.delete(fmt);
+        card.classList.remove('selected');
+      } else {
+        selectedFormats.add(fmt);
+        card.classList.add('selected');
+      }
+      updateConvertBtn();
+    });
+  });
+
+  // File handling
+  dropzone.addEventListener('click', () => fileInput.click());
+  dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('dragover'); });
+  dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+  dropzone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropzone.classList.remove('dragover');
+    addFiles([...e.dataTransfer.files]);
+  });
+  fileInput.addEventListener('change', () => { addFiles([...fileInput.files]); fileInput.value = ''; });
+  addFileInput.addEventListener('change', () => { addFiles([...addFileInput.files]); addFileInput.value = ''; });
+  addMoreBtn.addEventListener('click', () => addFileInput.click());
+  clearAllBtn.addEventListener('click', clearAll);
+
+  function addFiles(files) {
+    const wavFiles = files.filter(f => f.name.toLowerCase().endsWith('.wav'));
+    const skipped = files.length - wavFiles.length;
+    if (skipped > 0) alert(`WAV 파일만 지원합니다. ${skipped}개 파일이 제외되었습니다.`);
+    if (!wavFiles.length) return;
+
+    const existing = new Set(selectedFiles.map(f => f.name));
+    const newFiles = wavFiles.filter(f => !existing.has(f.name));
+    if (!newFiles.length) { alert('이미 추가된 파일입니다.'); return; }
+
+    selectedFiles.push(...newFiles);
+    newFiles.forEach(f => renderFileItem(f));
+    updateFileListHeader();
+    dropzone.style.display = 'none';
+    fileListEl.classList.add('visible');
+    updateConvertBtn();
+  }
+
+  function renderFileItem(file) {
+    const item = document.createElement('div');
+    item.className = 'file-item';
+    item.dataset.name = file.name;
+    item.innerHTML = `
+      <div class="file-item-icon">WAV</div>
+      <div class="file-item-meta">
+        <div class="file-item-name">${escapeHtml(file.name)}</div>
+        <div class="file-item-size">${formatBytes(file.size)}</div>
+      </div>
+      <button class="file-item-remove" title="제거">✕</button>`;
+    item.querySelector('.file-item-remove').addEventListener('click', () => removeFile(file.name));
+    fileListEl.insertBefore(item, addFileInput);
+  }
+
+  function removeFile(name) {
+    selectedFiles = selectedFiles.filter(f => f.name !== name);
+    const item = fileListEl.querySelector(`.file-item[data-name="${CSS.escape(name)}"]`);
+    if (item) item.remove();
+    updateFileListHeader();
+    if (selectedFiles.length === 0) {
+      fileListEl.classList.remove('visible');
+      dropzone.style.display = '';
+    }
+    updateConvertBtn();
+  }
+
+  function clearAll() {
+    selectedFiles = [];
+    fileListEl.querySelectorAll('.file-item').forEach(el => el.remove());
+    fileListEl.classList.remove('visible');
+    dropzone.style.display = '';
+    resultsEl.className = 'results';
+    resultsEl.innerHTML = '';
+    progressWrap.classList.remove('visible');
+    convertingBanner.classList.remove('visible');
+    doneBanner.classList.remove('visible');
+    updateConvertBtn();
+  }
+
+  function updateFileListHeader() {
+    fileListCount.textContent = `${selectedFiles.length}개 파일`;
+  }
+
+  function updateConvertBtn() {
+    const ok = ffmpegReady && selectedFiles.length > 0 && selectedFormats.size > 0;
+    convertBtn.disabled = !ok;
+    convertBtnText.textContent = selectedFiles.length > 0
+      ? `${selectedFiles.length}개 파일 변환 시작`
+      : '변환 시작';
+  }
+
+  let ffmpegBusy = false;
+
+  async function runSingleConversion(inputData, args, outName) {
+    // 매 변환마다 새 ffmpeg 인스턴스 생성 — v0.11 동시 실행 버그 완전 회피
+    const ff = createFFmpeg({
+      log: true,
+      mainName: 'main',
+      corePath: 'https://unpkg.com/@ffmpeg/core-st@0.11.1/dist/ffmpeg-core.js',
+    });
+    await ff.load();
+    ff.FS('writeFile', 'input.wav', inputData);
+    await ff.run('-i', 'input.wav', ...args, outName);
+    const data = ff.FS('readFile', outName);
+    return data;
+  }
+
+  // Convert
+  convertBtn.addEventListener('click', async () => {
+    const formats = [...selectedFormats];
+    if (!formats.length || !selectedFiles.length) return;
+
+    convertBtn.disabled = true;
+    progressWrap.classList.add('visible');
+    convertingBanner.classList.add('visible');
+    doneBanner.classList.remove('visible');
+    resultsEl.className = 'results visible';
+    resultsEl.innerHTML = '<div class="results-label">포맷별 ZIP 다운로드</div>';
+
+    // Build ZIP card UI
+    const zipData = {};
+    formats.forEach((fid, idx) => {
+      const def = FORMAT_DEFS[fid];
+      const card = document.createElement('div');
+      card.className = 'zip-card';
+      card.style.animationDelay = (idx * 0.08) + 's';
+
+      const dlBtn = document.createElement('button');
+      dlBtn.className = 'zip-dl-btn';
+      dlBtn.disabled = true;
+      dlBtn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 4v12M6 14l6 6 6-6"/><line x1="4" y1="22" x2="20" y2="22"/></svg> ZIP 다운로드`;
+
+      const metaId  = `zipmeta-${fid}`;
+      const filesId = `zipfiles-${fid}`;
+
+      card.innerHTML = `
+        <div class="zip-card-header">
+          <div class="zip-badge">${def.label}</div>
+          <div class="zip-info">
+            <div class="zip-title">${def.zipName}</div>
+            <div class="zip-meta" id="${metaId}">변환 준비 중...</div>
+          </div>
+        </div>
+        <div class="zip-file-list" id="${filesId}"></div>`;
+      card.querySelector('.zip-card-header').appendChild(dlBtn);
+      resultsEl.appendChild(card);
+
+      zipData[fid] = {
+        zip: new JSZip(), dlBtn,
+        metaEl:  document.getElementById(metaId),
+        filesEl: document.getElementById(filesId),
+        count: 0, bytes: 0,
+      };
+    });
+
+    // 모든 작업을 플랫 배열로 만들어 순서대로 실행
+    const tasks = [];
+    for (const file of selectedFiles) {
+      for (const fid of formats) {
+        tasks.push({ file, fid });
+      }
+    }
+
+    const total = tasks.length;
+    let done = 0;
+
+    // 파일별 row 참조 저장
+    const rowMap = new Map();
+
+    // 먼저 UI row 전부 생성
+    for (const { file, fid } of tasks) {
+      const def = FORMAT_DEFS[fid];
+      const zd  = zipData[fid];
+      const displayName = `${file.name.replace(/\.wav$/i, '')}${def.suffix}`;
+      const row = document.createElement('div');
+      row.className = 'zip-file-row active';
+      row.innerHTML = `<div class="zip-file-dot"></div><span>${escapeHtml(displayName)}</span>`;
+      zd.filesEl.appendChild(row);
+      rowMap.set(`${file.name}__${fid}`, { row, displayName });
+    }
+
+    // 파일 로드 캐시
+    const fileCache = new Map();
+
+    // 순차 실행
+    for (const { file, fid } of tasks) {
+      const def = FORMAT_DEFS[fid];
+      const zd  = zipData[fid];
+      const { row, displayName } = rowMap.get(`${file.name}__${fid}`);
+      const baseName  = file.name.replace(/\.wav$/i, '');
+      const inputName = 'input.wav';
+      const outName   = 'output' + def.suffix;
+
+      convertingTitle.textContent = `변환 중... (${done + 1} / ${total})`;
+      convertingSub.textContent   = `${file.name}  →  ${def.label}`;
+      setStatus('loading', `변환 중: ${file.name} → ${def.label}`);
+
+      try {
+        // 파일 로드 (같은 파일은 캐시 사용)
+        if (!fileCache.has(file.name)) {
+          const inputData = await fetchFile(file);
+          fileCache.set(file.name, inputData);
+        }
+
+        const data = await runSingleConversion(fileCache.get(file.name), def.args, 'output' + def.suffix);
+        zd.zip.file(displayName, data);
+        zd.bytes += data.length;
+        zd.count++;
+        row.className = 'zip-file-row done';
+
+      } catch (err) {
+        row.className = 'zip-file-row error';
+        row.querySelector('span').textContent += ` — 실패: ${err.message}`;
+      }
+
+      done++;
+      setProgress(Math.round((done / total) * 100), `변환 중... (${done} / ${total})`);
+    }
+
+    // Generate ZIPs
+    for (const fid of formats) {
+      const zd  = zipData[fid];
+      const def = FORMAT_DEFS[fid];
+      if (zd.count === 0) {
+        zd.metaEl.textContent = '변환된 파일 없음';
+        zd.dlBtn.textContent = '파일 없음';
+        continue;
+      }
+      try {
+        zd.metaEl.textContent = 'ZIP 생성 중...';
+        const blob = await zd.zip.generateAsync({ type: 'blob', compression: 'STORE' });
+        const url  = URL.createObjectURL(blob);
+        zd.dlBtn.disabled = false;
+        zd.dlBtn.addEventListener('click', () => {
+          const a = document.createElement('a');
+          a.href = url; a.download = def.zipName; a.click();
+        });
+        zd.metaEl.textContent = `${zd.count}개 파일 · ZIP ${formatBytes(blob.size)}`;
+      } catch (e) {
+        zd.metaEl.textContent = 'ZIP 생성 실패: ' + e.message;
+      }
+    }
+
+    setProgress(100, '모든 변환 완료!');
+    setStatus('ready', '변환 완료 — ZIP 파일을 다운로드하세요 🎉');
+    convertingBanner.classList.remove('visible');
+    doneBanner.classList.add('visible');
+    const totalConverted = formats.reduce((sum, fid) => sum + zipData[fid].count, 0);
+    doneTitle.textContent = '변환 완료! 🎉';
+    doneSub.textContent   = `총 ${totalConverted}개 파일 변환 성공 · ${formats.length}개 ZIP 파일 준비됨`;
+    progressWrap.classList.remove('visible');
+    convertBtn.disabled = false;
+  });
+
+  // Helpers
+  function setProgress(pct, label) {
+    progressFill.style.width = pct + '%';
+    progressLabel.textContent = label;
+    progressPct.textContent = pct + '%';
+  }
+
+  function formatBytes(b) {
+    if (b < 1024) return b + ' B';
+    if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
+    return (b / 1048576).toFixed(1) + ' MB';
+  }
+
+  function escapeHtml(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  loadFFmpeg();
+</script>
+</body>
+</html>
